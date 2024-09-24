@@ -12,19 +12,27 @@ app.use(express.json());
 const storage = getStorage();
 const upload = multer();
 
-// Helper function to retrieve existing Firestore data
-async function getExistingData() {
-    const docRef = doc(db, 'scrapedData', 'demo7');
-    const docSnap = await getDoc(docRef);
-    return docSnap.exists() ? docSnap.data().data || [] : [];
+
+async function getExistingDataFromDocs(docIds) {
+    const allData = [];
+    for (const docId of docIds) {
+        const docRef = doc(db, 'scrapedData', docId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            const data = docSnap.data().data || [];
+            allData.push(...data); 
+        }
+    }
+    return allData;
 }
 
 // Helper function to store updated data in Firestore
 async function storeData(updatedData) {
-    const docRef = doc(db, 'scrapedData', 'demo7');
+    const docRef = doc(db, 'scrapedData', 'demo8'); // Store new data in demo8
     await setDoc(docRef, { data: updatedData });
 }
 
+// Function to scrape data
 async function scrapeData(url) {
     const browser = await puppeteer.launch({ headless: false });
     const page = await browser.newPage();
@@ -48,7 +56,7 @@ async function scrapeData(url) {
                 const ageText = element.querySelector('h3')?.innerText.trim() || 'N/A';
                 const age = parseInt(ageText) || null;
 
-                // Updated Email Extraction Logic
+                // Email Extraction
                 const emailHeader = Array.from(element.querySelectorAll('h3'))
                     .find(h => h.innerText.includes("Associated Email Addresses"));
                 const emailList = emailHeader ? Array.from(emailHeader.nextElementSibling.querySelectorAll('li'))
@@ -85,7 +93,7 @@ async function scrapeData(url) {
     }
 }
 
-// Route to scrape data and handle duplicates
+// Route to scrape data and handle duplicates across multiple documents
 app.post('/scrape', async (req, res) => {
     const { url } = req.body;
 
@@ -98,9 +106,9 @@ app.post('/scrape', async (req, res) => {
         const scrapedData = await scrapeData(url);
 
         if (scrapedData.length > 0) {
-            console.log("Scraping successful. Fetching existing data...");
-            const existingData = await getExistingData();
-            const existingEmails = new Set(existingData.map(item => item.email ? item.email.toLowerCase().trim() : '')); // Ensure item.email is defined
+            console.log("Scraping successful. Fetching existing data from multiple documents...");
+            const existingData = await getExistingDataFromDocs(['demo4', 'demo5', 'demo6', 'demo7','demo8']);
+            const existingEmails = new Set(existingData.map(item => item.email ? item.email.toLowerCase().trim() : ''));
 
             // Filter out data with email as 'N/A' or repeating emails (from Firestore and current page duplicates)
             const newData = scrapedData.filter(item => 
@@ -111,8 +119,9 @@ app.post('/scrape', async (req, res) => {
             );
 
             if (newData.length > 0) {
-                console.log("New unique data found. Storing updated data...");
-                const updatedData = [...existingData, ...newData];
+                console.log("New unique data found. Storing updated data in demo8...");
+                const demo8ExistingData = await getExistingDataFromDocs(['demo8']);
+                const updatedData = [...demo8ExistingData, ...newData];
                 await storeData(updatedData);
 
                 res.json({
@@ -137,7 +146,7 @@ app.post('/scrape', async (req, res) => {
 // Route to download scraped data as Excel
 app.get('/download', async (req, res) => {
     try {
-        const scrapedData = await getExistingData();
+        const scrapedData = await getExistingDataFromDocs(['demo8']); 
 
         if (scrapedData.length === 0) {
             return res.status(404).json({ error: 'No data found' });
