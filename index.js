@@ -1,10 +1,13 @@
 const express = require('express');
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const ExcelJS = require('exceljs');
 const { db } = require('./firebaseConfig');
 const { doc, setDoc, getDoc } = require('firebase/firestore');
 const { getStorage, ref, uploadBytes } = require('firebase/storage');
 const multer = require('multer');
+
+puppeteer.use(StealthPlugin());
 
 const app = express();
 app.use(express.json());
@@ -12,7 +15,7 @@ app.use(express.json());
 const storage = getStorage();
 const upload = multer();
 
-
+// Function to retrieve existing data from Firestore documents
 async function getExistingDataFromDocs(docIds) {
     const allData = [];
     for (const docId of docIds) {
@@ -28,25 +31,17 @@ async function getExistingDataFromDocs(docIds) {
 
 // Helper function to store updated data in Firestore
 async function storeData(updatedData) {
-    const docRef = doc(db, 'scrapedData', 'demo8'); // Store new data in demo8
+    const docRef = doc(db, 'scrapedData', 'demo8');
     await setDoc(docRef, { data: updatedData });
 }
 
-// Function to scrape data
+// Function to scrape data using Puppeteer with stealth plugin
 async function scrapeData(url) {
     const browser = await puppeteer.launch({
-        headless: true, 
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--single-process', 
-          '--disable-gpu'
-        ],
-      });
+        headless: false, // Set to true if you don't want to see the browser
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 800 });
 
@@ -119,14 +114,14 @@ app.post('/scrape', async (req, res) => {
 
         if (scrapedData.length > 0) {
             console.log("Scraping successful. Fetching existing data from multiple documents...");
-            const existingData = await getExistingDataFromDocs(['demo4', 'demo5', 'demo6', 'demo7','demo8']);
+            const existingData = await getExistingDataFromDocs(['demo4', 'demo5', 'demo6', 'demo7', 'demo8']);
             const existingEmails = new Set(existingData.map(item => item.email ? item.email.toLowerCase().trim() : ''));
 
             // Filter out data with email as 'N/A' or repeating emails (from Firestore and current page duplicates)
-            const newData = scrapedData.filter(item => 
-                item.email !== 'N/A' && 
-                item.email && 
-                !existingEmails.has(item.email.toLowerCase().trim()) && 
+            const newData = scrapedData.filter(item =>
+                item.email !== 'N/A' &&
+                item.email &&
+                !existingEmails.has(item.email.toLowerCase().trim()) &&
                 item.age > 45 // Check for age > 45
             );
 
@@ -158,7 +153,7 @@ app.post('/scrape', async (req, res) => {
 // Route to download scraped data as Excel
 app.get('/download', async (req, res) => {
     try {
-        const scrapedData = await getExistingDataFromDocs(['demo8']); 
+        const scrapedData = await getExistingDataFromDocs(['demo8']);
 
         if (scrapedData.length === 0) {
             return res.status(404).json({ error: 'No data found' });
