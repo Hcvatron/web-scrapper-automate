@@ -31,7 +31,7 @@ async function getExistingDataFromDocs(docIds) {
 
 // Helper function to store updated data in Firestore
 async function storeData(updatedData) {
-    const docRef = doc(db, 'scrapedData', 'demo8');
+    const docRef = doc(db, 'scrapedData', 'demo9');
     await setDoc(docRef, { data: updatedData });
 }
 
@@ -114,7 +114,7 @@ app.post('/scrape', async (req, res) => {
 
         if (scrapedData.length > 0) {
             console.log("Scraping successful. Fetching existing data from multiple documents...");
-            const existingData = await getExistingDataFromDocs(['demo4', 'demo5', 'demo6', 'demo7', 'demo8']);
+            const existingData = await getExistingDataFromDocs(['demo4', 'demo5', 'demo6', 'demo7', 'demo8','demo9']);
             const existingEmails = new Set(existingData.map(item => item.email ? item.email.toLowerCase().trim() : ''));
 
             // Filter out data with email as 'N/A' or repeating emails (from Firestore and current page duplicates)
@@ -126,8 +126,8 @@ app.post('/scrape', async (req, res) => {
             );
 
             if (newData.length > 0) {
-                console.log("New unique data found. Storing updated data in demo8...");
-                const demo8ExistingData = await getExistingDataFromDocs(['demo8']);
+                console.log("New unique data found. Storing updated data in demo9...");
+                const demo8ExistingData = await getExistingDataFromDocs(['demo9']);
                 const updatedData = [...demo8ExistingData, ...newData];
                 await storeData(updatedData);
 
@@ -153,7 +153,7 @@ app.post('/scrape', async (req, res) => {
 // Route to download scraped data as Excel
 app.get('/download', async (req, res) => {
     try {
-        const scrapedData = await getExistingDataFromDocs(['demo8']);
+        const scrapedData = await getExistingDataFromDocs(['demo9']);
 
         if (scrapedData.length === 0) {
             return res.status(404).json({ error: 'No data found' });
