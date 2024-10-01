@@ -3,7 +3,7 @@ const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const ExcelJS = require('exceljs');
 const { db } = require('./firebaseConfig');
-const { doc, setDoc, getDoc } = require('firebase/firestore');
+const { doc, setDoc, getDoc, collection, getDocs } = require('firebase/firestore');
 const { getStorage, ref, uploadBytes } = require('firebase/storage');
 const multer = require('multer');
 
@@ -15,7 +15,6 @@ app.use(express.json());
 const storage = getStorage();
 const upload = multer();
 
-// Function to retrieve existing data from Firestore documents
 async function getExistingDataFromDocs(docIds) {
     const allData = [];
     for (const docId of docIds) {
@@ -29,16 +28,25 @@ async function getExistingDataFromDocs(docIds) {
     return allData;
 }
 
-// Helper function to store updated data in Firestore
+
+async function getAllDocumentIds() {
+    const docIds = [];
+    const snapshot = await getDocs(collection(db, 'scrapedData'));
+    snapshot.forEach(doc => {
+        docIds.push(doc.id);
+    });
+    return docIds;
+}
+
+
 async function storeData(updatedData) {
-    const docRef = doc(db, 'scrapedData', 'demo9');
+    const docRef = doc(db, 'scrapedData', 'Akash_doc2');
     await setDoc(docRef, { data: updatedData });
 }
 
-// Function to scrape data using Puppeteer with stealth plugin
 async function scrapeData(url) {
     const browser = await puppeteer.launch({
-        headless: false, // Set to true if you don't want to see the browser
+        headless: false,
         args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
 
@@ -68,7 +76,7 @@ async function scrapeData(url) {
                     .find(h => h.innerText.includes("Associated Email Addresses"));
                 const emailList = emailHeader ? Array.from(emailHeader.nextElementSibling.querySelectorAll('li'))
                     .map(el => el.innerText.trim()) : [];
-                const gmailEmails = emailList.filter(email => email.includes('@gmail.com')); // Only Gmail emails
+                const gmailEmails = emailList.filter(email => email.includes('@gmail.com'));
 
                 // Find phone numbers
                 const phoneHeader = Array.from(element.querySelectorAll('h3'))
@@ -83,7 +91,7 @@ async function scrapeData(url) {
                     items.push({
                         name,
                         age,
-                        email: gmailEmails[0] || 'N/A', // Get the first Gmail email
+                        email: gmailEmails[0] || 'N/A',
                         phone: phoneList[0] || 'N/A'
                     });
                 }
@@ -100,7 +108,7 @@ async function scrapeData(url) {
     }
 }
 
-// Route to scrape data and handle duplicates across multiple documents
+
 app.post('/scrape', async (req, res) => {
     const { url } = req.body;
 
@@ -114,10 +122,12 @@ app.post('/scrape', async (req, res) => {
 
         if (scrapedData.length > 0) {
             console.log("Scraping successful. Fetching existing data from multiple documents...");
-            const existingData = await getExistingDataFromDocs(['demo4', 'demo5', 'demo6', 'demo7', 'demo8','demo9']);
+
+            // Fetch all document IDs dynamically
+            const allDocIds = await getAllDocumentIds();
+            const existingData = await getExistingDataFromDocs(allDocIds);
             const existingEmails = new Set(existingData.map(item => item.email ? item.email.toLowerCase().trim() : ''));
 
-            // Filter out data with email as 'N/A' or repeating emails (from Firestore and current page duplicates)
             const newData = scrapedData.filter(item =>
                 item.email !== 'N/A' &&
                 item.email &&
@@ -126,9 +136,9 @@ app.post('/scrape', async (req, res) => {
             );
 
             if (newData.length > 0) {
-                console.log("New unique data found. Storing updated data in demo9...");
-                const demo8ExistingData = await getExistingDataFromDocs(['demo9']);
-                const updatedData = [...demo8ExistingData, ...newData];
+                console.log("New unique data found. Storing updated data in Akash_doc2...");
+                const akashExistingData = await getExistingDataFromDocs(['Akash_doc2']);
+                const updatedData = [...akashExistingData, ...newData];
                 await storeData(updatedData);
 
                 res.json({
@@ -153,14 +163,14 @@ app.post('/scrape', async (req, res) => {
 // Route to download scraped data as Excel
 app.get('/download', async (req, res) => {
     try {
-        const scrapedData = await getExistingDataFromDocs(['demo9']);
+        const scrapedData = await getExistingDataFromDocs(['Akash_doc2']);
 
         if (scrapedData.length === 0) {
             return res.status(404).json({ error: 'No data found' });
         }
 
         const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Scraped Data');
+        const worksheet = workbook.addWorksheet('Akash Data');
         worksheet.columns = [
             { header: 'Name', key: 'name', width: 30 },
             { header: 'Age', key: 'age', width: 10 },
