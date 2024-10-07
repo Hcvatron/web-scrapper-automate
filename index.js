@@ -15,10 +15,11 @@ app.use(express.json());
 const storage = getStorage();
 const upload = multer();
 
+// Function to get existing data from multiple documents
 async function getExistingDataFromDocs(docIds) {
     const allData = [];
     for (const docId of docIds) {
-        const docRef = doc(db, 'scrapedData', docId);
+        const docRef = doc(db, 'scrapped_data_yahoo', docId); // Updated collection
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
             const data = docSnap.data().data || [];
@@ -28,22 +29,23 @@ async function getExistingDataFromDocs(docIds) {
     return allData;
 }
 
-
+// Function to get all document IDs
 async function getAllDocumentIds() {
     const docIds = [];
-    const snapshot = await getDocs(collection(db, 'scrapedData'));
+    const snapshot = await getDocs(collection(db, 'scrapped_data_yahoo')); // Updated collection
     snapshot.forEach(doc => {
         docIds.push(doc.id);
     });
     return docIds;
 }
 
-
+// Function to store data in Firestore
 async function storeData(updatedData) {
-    const docRef = doc(db, 'scrapedData', 'Ashish_doc1');
+    const docRef = doc(db, 'scrapped_data_yahoo', 'Akash_doc1'); // Updated collection
     await setDoc(docRef, { data: updatedData });
 }
 
+// Function to scrape data from the given URL
 async function scrapeData(url) {
     const browser = await puppeteer.launch({
         headless: false,
@@ -108,7 +110,7 @@ async function scrapeData(url) {
     }
 }
 
-
+// POST route to scrape data
 app.post('/scrape', async (req, res) => {
     const { url } = req.body;
 
@@ -136,8 +138,8 @@ app.post('/scrape', async (req, res) => {
             );
 
             if (newData.length > 0) {
-                console.log("New unique data found. Storing updated data in Ashish_doc1...");
-                const akashExistingData = await getExistingDataFromDocs(['Ashish_doc1']);
+                console.log("New unique data found. Storing updated data in Akash_doc1...");
+                const akashExistingData = await getExistingDataFromDocs(['Akash_doc1']);
                 const updatedData = [...akashExistingData, ...newData];
                 await storeData(updatedData);
 
@@ -163,7 +165,7 @@ app.post('/scrape', async (req, res) => {
 // Route to download scraped data as Excel
 app.get('/download', async (req, res) => {
     try {
-        const scrapedData = await getExistingDataFromDocs(['Akash_doc3']);
+        const scrapedData = await getExistingDataFromDocs(['Akash_doc1']); // Adjust document name if needed
 
         if (scrapedData.length === 0) {
             return res.status(404).json({ error: 'No data found' });
