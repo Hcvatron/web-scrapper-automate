@@ -3,14 +3,13 @@ const { getFirestore } = require('firebase/firestore');
 const { getStorage } = require('firebase/storage');
 
 const firebaseConfig = {
-    apiKey: "AIzaSyBV5Bz_jY6C4GVoCH_Esg-LGrrFuG64NZo",
-    authDomain: "scrapper-9beb2.firebaseapp.com",
-    projectId: "scrapper-9beb2",
-    storageBucket: "scrapper-9beb2.appspot.com",
-    messagingSenderId: "244184566873",
-    appId: "1:244184566873:web:73bf14432cab9c40daf548",
-    measurementId: "G-K00Q86M2G9"
-};
+    apiKey: "AIzaSyBbhnPcFfl_J627uUi3xAB7140NWHDVjSw",
+    authDomain: "scrapper-2f59c.firebaseapp.com",
+    projectId: "scrapper-2f59c",
+    storageBucket: "scrapper-2f59c.appspot.com",
+    messagingSenderId: "971733365816",
+    appId: "1:971733365816:web:659b689b1699d7e64622cd"
+  };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);

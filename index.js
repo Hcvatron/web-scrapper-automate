@@ -40,7 +40,7 @@ async function getAllDocumentIds() {
 
 
 async function storeData(updatedData) {
-    const docRef = doc(db, 'scrapedData', 'Akash_doc2');
+    const docRef = doc(db, 'scrapedData', 'Ashish_doc1');
     await setDoc(docRef, { data: updatedData });
 }
 
@@ -76,7 +76,7 @@ async function scrapeData(url) {
                     .find(h => h.innerText.includes("Associated Email Addresses"));
                 const emailList = emailHeader ? Array.from(emailHeader.nextElementSibling.querySelectorAll('li'))
                     .map(el => el.innerText.trim()) : [];
-                const gmailEmails = emailList.filter(email => email.includes('@gmail.com'));
+                const gmailEmails = emailList.filter(email => email.includes('@yahoo.com'));
 
                 // Find phone numbers
                 const phoneHeader = Array.from(element.querySelectorAll('h3'))
@@ -136,8 +136,8 @@ app.post('/scrape', async (req, res) => {
             );
 
             if (newData.length > 0) {
-                console.log("New unique data found. Storing updated data in Akash_doc2...");
-                const akashExistingData = await getExistingDataFromDocs(['Akash_doc2']);
+                console.log("New unique data found. Storing updated data in Ashish_doc1...");
+                const akashExistingData = await getExistingDataFromDocs(['Ashish_doc1']);
                 const updatedData = [...akashExistingData, ...newData];
                 await storeData(updatedData);
 
@@ -163,14 +163,14 @@ app.post('/scrape', async (req, res) => {
 // Route to download scraped data as Excel
 app.get('/download', async (req, res) => {
     try {
-        const scrapedData = await getExistingDataFromDocs(['Akash_doc2']);
+        const scrapedData = await getExistingDataFromDocs(['Akash_doc3']);
 
         if (scrapedData.length === 0) {
             return res.status(404).json({ error: 'No data found' });
         }
 
         const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Akash Data');
+        const worksheet = workbook.addWorksheet('Scrapped Data');
         worksheet.columns = [
             { header: 'Name', key: 'name', width: 30 },
             { header: 'Age', key: 'age', width: 10 },
