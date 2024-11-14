@@ -14,9 +14,9 @@ app.use(express.json());
 const storage = getStorage();
 const upload = multer();
 
-const docName = "Akash_doc_1510"
+const docName = "Akash_doc_1311"
 
-// Function to get existing data from Firestore documents
+// Function to get existing data from Firestore documents+`
 async function getExistingDataFromDocs(docIds) {
     const allDataPromises = docIds.map(async (docId) => {
         const docRef = doc(db, 'scrapped_data_automate', docId);
@@ -26,6 +26,12 @@ async function getExistingDataFromDocs(docIds) {
 
     const allData = await Promise.all(allDataPromises);
     return allData.flat(); // Merge all arrays into a single array
+}
+
+async function getExistingDataFromDoc(docName) {
+    const docRef = doc(db, 'scrapped_data_automate', docName);
+    const docSnap = await getDoc(docRef);
+    return docSnap.exists() ? docSnap.data().data || [] : [];
 }
 
 // Function to get all document IDs from Firestore
@@ -77,7 +83,6 @@ async function clickElementWithRetry(driver, element, retries = 3) {
     throw new Error('Element not clickable after multiple attempts');
 }
 
-
 // Function to scrape data for a single page
 async function scrapeDataOnPage(driver) {
     return driver.executeScript(() => {
@@ -97,19 +102,31 @@ async function scrapeDataOnPage(driver) {
                 const emailList = emailHeader ? Array.from(emailHeader.nextElementSibling.querySelectorAll('li'))
                     .map(el => el.innerText.trim()) : [];
 
-                // Filter emails based on specific domains and pick the first valid one
-                let email = emailList.find(email =>
-                    email.includes('@aol.') ||
-                    email.includes('@yahoo.') ||
-                    email.includes('@comcast.') ||
-                    email.includes('@Hotmail.')
-                );
-                
-                // If no email found from the specified domains, look for a gmail.com email
-                if (!email) {
-                    email = emailList.find(email => email.includes('@gmail.com'));
-                }
+                    let email = emailList[0];
 
+                if(!email){
+                    email = emailList.find(email =>
+                        email.includes('@Aol.') ||
+                        email.includes('@comcast.') ||
+                        email.includes('@msn.') ||
+                        email.includes('@icloud.') ||
+                        email.includes('@live.') ||
+                        email.includes('@att.') ||
+                        email.includes('@Bellsouth.') ||
+                        email.includes('@Roadrunner.') ||
+                        email.includes('@Reagan.') ||
+                        email.includes('@Verizon.') ||
+                        email.includes('@Mcgill.') ||
+                        email.includes('@Netzero.') ||
+                        email.includes('@Hotmail.') ||
+                        email.includes('@yahoo.') ||
+                        email.includes('@gmail.com') || 
+                        email.includes('@comcast.') || 
+                        email.includes('@Charter.')
+                    );
+    
+                }
+            
                 // Skip if no valid email is found
                 if (!email) return;
 
@@ -134,8 +151,7 @@ async function scrapeDataOnPage(driver) {
                     age,
                     email, // Only the first valid email
                     phone: phoneList[0] || 'N/A',
-                    lastKnownAddress, // Add last known address
-                    pastAddresses: pastAddressList, // Add past addresses as an array
+
                 });
             }
         });
@@ -143,12 +159,6 @@ async function scrapeDataOnPage(driver) {
     });
 }
 
-
-
-
-
-
-// Main scraping function
 async function scrapeDataWithSelenium(url) {
     let driver = await new Builder().forBrowser('chrome').build();
     let scrapedData = [];
@@ -161,30 +171,33 @@ async function scrapeDataWithSelenium(url) {
         // Step 2: Get all <li> elements that contain the name links
         let nameElements = await driver.findElements(By.css('#names-list li a'));
 
+        console.log("Names list found:", nameElements.length);
+
         for (let i = 0; i < nameElements.length; i++) {
             const personLink = nameElements[i];
+            await driver.executeScript("document.body.style.zoom='50%'");
 
             // Attempt to click the link with retry
             await clickElementWithRetry(driver, personLink);
-            
+
             // Wait for the detail page to load
             await driver.wait(until.elementLocated(By.css('h2')), 10000);
-            console.log("Clicked name -->");
+            console.log("Clicked on name, now scraping data...");
 
             // Step 4: Scrape relevant data on the person's page
             const personData = await scrapeDataOnPage(driver);
             if (personData.length > 0) {
                 scrapedData.push(...personData);
-                console.log("Data pushed -->");
+                console.log("Data scraped and added.");
             }
 
             // Step 5: Navigate back to the list page
             await driver.navigate().back();
-            await driver.wait(until.elementLocated(By.css('#names-list li a')), 10000);
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Adjust delay as necessary
+            await driver.wait(until.elementLocated(By.css('#names-list li a')), 10000); // Ensure the list is loaded
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Pause for a short moment
 
             // Re-fetch the name elements after navigating back
-            nameElements = await driver.findElements(By.css('#names-list li a'));
+            nameElements = await driver.findElements(By.css('#names-list li a')); // Reassign
         }
 
         return scrapedData;
@@ -220,7 +233,6 @@ async function saveUrl(url) {
     }
 }
 
-
 // Route to scrape data and store it in Firestore
 app.post('/scrape', async (req, res) => {
     const { url } = req.body;
@@ -230,98 +242,88 @@ app.post('/scrape', async (req, res) => {
     }
 
     try {
-
         const alreadyProcessed = await isUrlAlreadyProcessed(url);
         if (alreadyProcessed) {
             return res.status(200).json({ message: 'URL has already been checked. Skipping scrape.' });
         }
 
-
         const scrapedData = await scrapeDataWithSelenium(url);
         if (scrapedData.length > 0) {
             const allDocIds = await getAllDocumentIds();
             const existingData = await getExistingDataFromDocs(allDocIds);
+            const existingDocData = await getExistingDataFromDoc(docName);
 
-
-            // Extract emails from the existing data for comparison
+      
             const existingEmails = new Set(existingData.map(item => item.email));
 
-            // Filter out any scraped data where the email already exists
+          
             const newData = scrapedData.filter(item => !existingEmails.has(item.email));
+ 
+            const updatedData = [...existingDocData,...newData];
+            await storeData(newData);
+            await saveUrl(url); 
 
-            if (newData.length > 0) {
-                // Get current data from Firestore (doc2) and append only the new data
-                const currentData = await getExistingDataFromDocs([docName]);
-                const updatedData = [...currentData, ...newData]; // Append new, non-duplicate data
-                await storeData(updatedData);
-
-                await saveUrl(url);
-
-                res.json({
-                    message: 'Scraping successful',
-                    newEntries: newData.length, // Number of new entries added
-                    totalEntries: updatedData.length // Total entries after update
-                });
-            } else {
-                await saveUrl(url);
-                res.status(200).json({ message: 'No new unique data to add.' });
-            }
+          return  res.json({
+                message: 'Scraping successful',
+                newEntries: newData.length,
+                totalEntries: updatedData.length
+            });
         } else {
-            res.status(200).json({ message: 'No valid data scraped.' });
+            return res.status(200).json({ message: 'No new data found.', data: scrapedData });
         }
     } catch (error) {
-        console.error('Error in /scrape:', error);
-        res.status(500).json({ error: error.message });
+        console.error("Error during scraping:", error);
+        return res.status(500).json({ error: 'An error occurred while scraping the data.' });
     }
 });
 
-
-
-// Route to download scraped data as Excel
+// Route to download the Excel file
 app.get('/download', async (req, res) => {
+    const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Scraped Data');
+
+    // Set column headers
+    worksheet.columns = [
+        { header: 'Email', key: 'email', width: 30 },
+        { header: 'Name', key: 'name', width: 30 },
+        { header: 'Age', key: 'age', width: 10 },
+        { header: 'Phone', key: 'phone', width: 20 },
+    ];
+
     try {
-        const scrapedData = await getExistingDataFromDocs([docName]);
+        // Fetch data to be written in the Excel file
+        const existingData = await getExistingDataFromDoc(docName);
 
-        if (scrapedData.length === 0) {
-            return res.status(404).send('No data available to download.');
-        }
-
-        const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Scraped Data');
-
-        worksheet.columns = [
-            { header: 'Name', key: 'name' },
-            { header: 'Age', key: 'age' },
-            { header: 'Email', key: 'email' },
-            { header: 'Phone', key: 'phone' },
-            { header: 'Addresses', key: 'addresses' },
-        ];
-
-        scrapedData.forEach(person => {
+        existingData.forEach(person => {
             worksheet.addRow({
+                email: person.email,
                 name: person.name,
                 age: person.age,
-                email: person.email,
                 phone: person.phone,
-                addresses: person.addresses.join(', '),
             });
         });
 
+        // Write the Excel file to a buffer
         const buffer = await workbook.xlsx.writeBuffer();
-        const timestamp = new Date().toISOString().replace(/[-:.]/g, '');
+
+        // Set headers for the response
         res.set({
-            'Content-Disposition': `attachment; filename=scraped_data_${timestamp}.xlsx`,
+            'Content-Disposition': `attachment; filename="${docName}.xlsx"`,
             'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Length': buffer.length
         });
 
+        // Send the buffer in the response
         res.send(buffer);
     } catch (error) {
-        res.status(500).send('Error generating Excel file.',error);
+        console.error("Error downloading Excel file:", error);
+        return res.status(500).json({ error: 'An error occurred while downloading the file.' });
     }
 });
 
 // Start the server
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3099;
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`Server is running on http://localhost:${PORT}/download`);
 });
