@@ -14,7 +14,7 @@ app.use(express.json());
 const storage = getStorage();
 const upload = multer();
 
-const docName = "Akash_doc_1311"
+const docName = "Akash_doc_0412"
 
 // Function to get existing data from Firestore documents+`
 async function getExistingDataFromDocs(docIds) {
@@ -40,11 +40,6 @@ async function getAllDocumentIds() {
     return snapshot.docs.map(doc => doc.id);
 }
 
-// Function to store new data in Firestore
-async function storeData(updatedData) {
-    const docRef = doc(db, 'scrapped_data_automate', docName);
-    await setDoc(docRef, { data: updatedData });
-}
 
 // Function to handle the agreement modal
 async function handleAgreementModal(driver) {
@@ -87,126 +82,142 @@ async function clickElementWithRetry(driver, element, retries = 3) {
 async function scrapeDataOnPage(driver) {
     return driver.executeScript(() => {
         const items = [];
+        const debugLogs = []; // Array to collect logs
         const elements = document.querySelectorAll('.person');
 
-        elements.forEach(element => {
-            const name = element.querySelector('h2 a')?.innerText.trim() || 'N/A';
-            const ageText = element.querySelector('h3')?.innerText.trim() || 'N/A';
-            const age = parseInt(ageText) || null;
+        debugLogs.push(`Total persons found: ${elements.length}`);
 
-            // Proceed only if age is greater than 45
-            if (age && age > 45) {
-                // Email Extraction
-                const emailHeader = Array.from(element.querySelectorAll('h3'))
-                    .find(h => h.innerText.includes("Associated Email Addresses"));
-                const emailList = emailHeader ? Array.from(emailHeader.nextElementSibling.querySelectorAll('li'))
-                    .map(el => el.innerText.trim()) : [];
+        elements.forEach((person, index) => {
+            const personData = {};
 
-                    let email = emailList[0];
+            // Extract Name
+            const nameElement = person.querySelector('h2 a');
+            personData.name = nameElement ? nameElement.innerText.trim() : 'N/A';
+            debugLogs.push(`Person ${index + 1}: Name: ${personData.name}`);
 
-                if(!email){
-                    email = emailList.find(email =>
-                        email.includes('@Aol.') ||
-                        email.includes('@comcast.') ||
-                        email.includes('@msn.') ||
-                        email.includes('@icloud.') ||
-                        email.includes('@live.') ||
-                        email.includes('@att.') ||
-                        email.includes('@Bellsouth.') ||
-                        email.includes('@Roadrunner.') ||
-                        email.includes('@Reagan.') ||
-                        email.includes('@Verizon.') ||
-                        email.includes('@Mcgill.') ||
-                        email.includes('@Netzero.') ||
-                        email.includes('@Hotmail.') ||
-                        email.includes('@yahoo.') ||
-                        email.includes('@gmail.com') || 
-                        email.includes('@comcast.') || 
-                        email.includes('@Charter.')
-                    );
-    
+            // Extract Age
+            const ageText = person.querySelector('h3')?.innerText.trim() || 'N/A';
+            personData.age = parseInt(ageText) || null;
+            debugLogs.push(`Person ${index + 1}: Age: ${personData.age}`);
+
+            // Search for "other email addresses" in all <span> elements
+            const spans = Array.from(person.querySelectorAll('span'));
+            const matchingSpan = spans.find(span => span.innerText.toLowerCase().includes('other email addresses'));
+
+            if (matchingSpan) {
+                debugLogs.push(`Person ${index + 1}: Found matching span with text: ${matchingSpan.innerText}`);
+
+                try {
+                    // Simulate hovering or clicking on the span
+                    matchingSpan.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+                    debugLogs.push(`Person ${index + 1}: Hovered over the matching span.`);
+                } catch (error) {
+                    debugLogs.push(`Person ${index + 1}: Error interacting with matching span - ${error.message}`);
                 }
-            
-                // Skip if no valid email is found
-                if (!email) return;
 
-                // Find phone numbers
-                const phoneHeader = Array.from(element.querySelectorAll('h3'))
-                    .find(h => h.innerText.includes("Associated Phone Numbers"));
-                const phoneList = phoneHeader ? Array.from(phoneHeader.nextElementSibling.querySelectorAll('li'))
-                    .map(el => el.innerText.trim()) : [];
+                // Ensure tooltip is visible
+                const tooltipTextSpan = matchingSpan.querySelector('.tooltiptext');
+                if (tooltipTextSpan) {
+                    tooltipTextSpan.style.display = 'block'; // Force visibility
+                    const tooltipContent = tooltipTextSpan.innerHTML.trim(); // Use innerHTML to capture raw HTML
+                    debugLogs.push(`Person ${index + 1}: Tooltip content (innerHTML): ${tooltipContent}`);
 
-                // Extracting addresses
-                const lastKnownAddressHeader = Array.from(element.querySelectorAll('h3'))
-                    .find(h => h.innerText.includes("Last Known Address"));
-                const lastKnownAddress = lastKnownAddressHeader ? lastKnownAddressHeader.nextElementSibling.innerText.trim() : 'N/A';
+                    // Extract emails from the HTML
+                    const emails = tooltipContent
+                        .split(/<br\s*\/?>/) // Split by <br> or <br/>
+                        .map(email => email.trim()) // Trim whitespace
+                        .filter(email => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)); // Validate email format
 
-                const pastAddressHeader = Array.from(element.querySelectorAll('h3'))
-                    .find(h => h.innerText.includes("Past Addresses"));
-                const pastAddressList = pastAddressHeader ? Array.from(pastAddressHeader.nextElementSibling.nextElementSibling.querySelectorAll('li'))
-                    .map(el => el.innerText.trim()) : [];
+                    personData.emails = emails;
+                    debugLogs.push(`Person ${index + 1}: Extracted emails: ${emails.join(', ')}`);
+                } else {
+                    debugLogs.push(`Person ${index + 1}: Tooltip text not found or is empty.`);
+                    personData.emails = [];
+                }
+            } else {
+                debugLogs.push(`Person ${index + 1}: No matching span found.`);
+                personData.emails = [];
+            }
 
-                items.push({
-                    name,
-                    age,
-                    email, // Only the first valid email
-                    phone: phoneList[0] || 'N/A',
-
-                });
+            // Add to results only if age > 45 and emails are present
+            if (personData.age && personData.age > 45 && personData.emails.length > 0) {
+                items.push(personData);
+                debugLogs.push(`Person ${index + 1}: Added to results.`);
+            } else {
+                debugLogs.push(`Person ${index + 1}: Not added to results (missing emails or age <= 45).`);
             }
         });
-        return items;
+
+        return { items, debugLogs }; // Return both data and logs
     });
 }
 
 async function scrapeDataWithSelenium(url) {
-    let driver = await new Builder().forBrowser('chrome').build();
+    let driver;
     let scrapedData = [];
+    let attempt = 0;
+    const maxAttempts = 3; 
 
-    try {
-        // Step 1: Navigate to the main page that contains the names list
-        await driver.get(url);
-        await handleAgreementModal(driver);
+    while (attempt < maxAttempts) {
+        try {
+            console.log(`Attempt ${attempt + 1}: Starting browser for URL: ${url}`);
+            driver = await new Builder().forBrowser('chrome').build();
 
-        // Step 2: Get all <li> elements that contain the name links
-        let nameElements = await driver.findElements(By.css('#names-list li a'));
+            // Step 1: Navigate to the main page that contains the names list
+            await driver.get(url);
+            await handleAgreementModal(driver);
 
-        console.log("Names list found:", nameElements.length);
+            // Step 2: Get all <li> elements that contain the name links
+            let nameElements = await driver.findElements(By.css('#names-list li a'));
 
-        for (let i = 0; i < nameElements.length; i++) {
-            const personLink = nameElements[i];
-            await driver.executeScript("document.body.style.zoom='50%'");
+            console.log("Names list found:", nameElements.length);
 
-            // Attempt to click the link with retry
-            await clickElementWithRetry(driver, personLink);
+            for (let i = 0; i < nameElements.length; i++) {
+                const personLink = nameElements[i];
 
-            // Wait for the detail page to load
-            await driver.wait(until.elementLocated(By.css('h2')), 10000);
-            console.log("Clicked on name, now scraping data...");
+                // Attempt to click the link with retry
+                await clickElementWithRetry(driver, personLink);
 
-            // Step 4: Scrape relevant data on the person's page
-            const personData = await scrapeDataOnPage(driver);
-            if (personData.length > 0) {
-                scrapedData.push(...personData);
-                console.log("Data scraped and added.");
+                // Wait for the detail page to load
+                await driver.wait(until.elementLocated(By.css('h2')), 10000);
+                console.log(`Clicked on name ${i + 1}, now scraping data...`);
+
+                // Step 4: Scrape relevant data on the person's page
+                const { items: personData, debugLogs } = await scrapeDataOnPage(driver);
+
+                // Log debug information
+                console.log(`Debug logs for person ${i + 1}:\n`, debugLogs.join('\n'));
+
+                if (personData.length > 0) {
+                    scrapedData.push(...personData);
+                    console.log(`Data for person ${i + 1} scraped and added.`);
+                } else {
+                    console.log(`No data found for person ${i + 1}.`);
+                }
+
+                // Step 5: Navigate back to the list page
+                await driver.navigate().back();
+                await driver.wait(until.elementLocated(By.css('#names-list li a')), 10000); // Ensure the list is loaded
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Pause for a short moment
+
+                // Re-fetch the name elements after navigating back
+                nameElements = await driver.findElements(By.css('#names-list li a')); // Reassign
             }
 
-            // Step 5: Navigate back to the list page
-            await driver.navigate().back();
-            await driver.wait(until.elementLocated(By.css('#names-list li a')), 10000); // Ensure the list is loaded
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Pause for a short moment
-
-            // Re-fetch the name elements after navigating back
-            nameElements = await driver.findElements(By.css('#names-list li a')); // Reassign
+            return scrapedData; // Return data if scraping succeeds
+        } catch (error) {
+            console.error(`Error during scraping attempt ${attempt + 1}:`, error);
+                await driver.quit(); // Close the browser instance
+            attempt++;
+            console.log(`Restarting browser... (Attempt ${attempt} of ${maxAttempts})`);
+        } finally{
+            await driver.quit(); // Close the browser instance
         }
-
-        return scrapedData;
-    } catch (error) {
-        console.error("Error scraping data:", error);
-    } finally {
-        await driver.quit();
     }
+
+    throw new Error(`Failed to scrape data after ${maxAttempts} attempts`);
 }
+
 
 // Function to check if a URL is already processed
 async function isUrlAlreadyProcessed(url) {
@@ -233,41 +244,71 @@ async function saveUrl(url) {
     }
 }
 
+
+// Function to store new data in Firestore
+async function storeData(newData) {
+    const docRef = doc(db, 'scrapped_data_automate', docName);
+
+    try {
+        // Get all document IDs in the collection
+        const docIds = await getAllDocumentIds();
+
+        // Fetch all existing data using your existing function
+        const existingData = await getExistingDataFromDocs(docIds);
+
+        // Merge existing data with new data and prevent duplicates by email
+        const updatedData = [...existingData,...newData];
+
+
+        // Save the updated data back to a single document in Firestore
+        await setDoc(docRef, { data: updatedData }, { merge: true }); 
+        return updatedData;
+    } catch (error) {
+        console.error("Error storing data in Firestore:", error);
+        throw error;
+    }
+}
+
+
+
+
 // Route to scrape data and store it in Firestore
 app.post('/scrape', async (req, res) => {
-    const { url } = req.body;
+    const { baseUrl, startPage = 1, endPage = 100 } = req.body;
 
-    if (!url) {
-        return res.status(400).json({ error: 'Please provide a valid URL.' });
+    if (!baseUrl || !baseUrl.includes('{page}')) {
+        return res.status(400).json({ error: 'Please provide a valid base URL with a placeholder {page}.' });
     }
 
     try {
-        const alreadyProcessed = await isUrlAlreadyProcessed(url);
-        if (alreadyProcessed) {
-            return res.status(200).json({ message: 'URL has already been checked. Skipping scrape.' });
+        let scrapedData = [];
+        for (let page = startPage; page <= endPage; page++) {
+            const url = baseUrl.replace('{page}', page); // Replace {page} in the base URL with the current page number
+
+            const alreadyProcessed = await isUrlAlreadyProcessed(url);
+            if (alreadyProcessed) {
+                console.log(`URL already processed: ${url}. Skipping.`);
+                continue;
+            }
+
+            console.log(`Processing URL: ${url}`);
+            const pageData = await scrapeDataWithSelenium(url);
+
+            if (pageData.length > 0) {
+                scrapedData.push(...pageData);
+                await saveUrl(url); // Mark URL as processed
+            }
         }
 
-        const scrapedData = await scrapeDataWithSelenium(url);
         if (scrapedData.length > 0) {
-            const allDocIds = await getAllDocumentIds();
-            const existingData = await getExistingDataFromDocs(allDocIds);
-            const existingDocData = await getExistingDataFromDoc(docName);
-
-      
-            const existingEmails = new Set(existingData.map(item => item.email));
-
-          
-            const newData = scrapedData.filter(item => !existingEmails.has(item.email));
- 
-            const updatedData = [...existingDocData,...newData];
-            await storeData(newData);
-            await saveUrl(url); 
-
-          return  res.json({
-                message: 'Scraping successful',
-                newEntries: newData.length,
+            const updatedData = await storeData(scrapedData); // Store unique data across all documents
+            console.log("Scrapping complete for ",url);
+            return res.json({
+                message: `Scraping successful for ${url} `,
+                newEntries: scrapedData.length,
                 totalEntries: updatedData.length
             });
+           
         } else {
             return res.status(200).json({ message: 'No new data found.', data: scrapedData });
         }
@@ -285,7 +326,7 @@ app.get('/download', async (req, res) => {
 
     // Set column headers
     worksheet.columns = [
-        { header: 'Email', key: 'email', width: 30 },
+        { header: 'Email', key: 'email', width: 100 },
         { header: 'Name', key: 'name', width: 30 },
         { header: 'Age', key: 'age', width: 10 },
         { header: 'Phone', key: 'phone', width: 20 },
@@ -297,7 +338,7 @@ app.get('/download', async (req, res) => {
 
         existingData.forEach(person => {
             worksheet.addRow({
-                email: person.email,
+                email: person.emails,
                 name: person.name,
                 age: person.age,
                 phone: person.phone,
@@ -322,8 +363,61 @@ app.get('/download', async (req, res) => {
     }
 });
 
+
+// Route to download the Excel file with only emails
+app.get('/downloademails', async (req, res) => {
+    const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Emails Only');
+
+    // Set column headers for the worksheet
+    worksheet.columns = [
+        { header: 'Emails', key: 'emails', width: 50 },
+        { header: 'Name', key: 'name', width: 30 }
+    ];
+
+    try {
+        // Fetch data to be written in the Excel file
+        const existingData = await getExistingDataFromDoc(docName);
+
+        existingData.forEach(person => {
+            if (person.emails && person.emails.length > 0) {
+                person.emails.forEach(email => {
+                    worksheet.addRow({
+                        emails: email,
+                        name: person.name,
+                    });
+                });
+            } else {
+                worksheet.addRow({
+                    emails: 'No emails found',
+                    name: person.name,
+                });
+            }
+        });
+
+        // Write the Excel file to a buffer
+        const buffer = await workbook.xlsx.writeBuffer();
+
+        // Set headers for the response
+        res.set({
+            'Content-Disposition': `attachment; filename="emails_only_${timestamp}.xlsx"`,
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Length': buffer.length
+        });
+
+        // Send the buffer in the response
+        res.send(buffer);
+    } catch (error) {
+        console.error("Error downloading emails Excel file:", error);
+        return res.status(500).json({ error: 'An error occurred while downloading the emails file.' });
+    }
+});
+
+
 // Start the server
 const PORT = process.env.PORT || 3099;
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}/download`);
+    console.log(`Server is running on http://localhost:${PORT}/downloademails`);
 });
